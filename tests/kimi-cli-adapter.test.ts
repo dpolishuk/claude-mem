@@ -205,4 +205,69 @@ describe('kimiCliAdapter - AGENTS.md context sync', () => {
       cleanupTmpDir(tmpDir);
     }
   });
+
+  it('should refresh AGENTS.md on subsequent SessionStart calls', () => {
+    const tmpDir = setupTmpDir();
+    try {
+      const placeholder = `# Memory Context from Past Sessions\n\n*No context yet.*\n<!-- KIMI_PLACEHOLDER_V1 -->`;
+      writeFileSync(join(tmpDir, '.kimi', 'AGENTS.md'), placeholder);
+
+      // First SessionStart
+      const result1 = {
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: '# Session 1\n\nDiscussed parsing.',
+        },
+      };
+      kimiCliAdapter.formatOutput(result1 as any);
+      const content1 = readFileSync(join(tmpDir, '.kimi', 'AGENTS.md'), 'utf-8');
+      expect(content1).toContain('# Session 1');
+
+      // Second SessionStart — must refresh, not skip
+      const result2 = {
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: '# Session 2\n\nDiscussed escaping.',
+        },
+      };
+      kimiCliAdapter.formatOutput(result2 as any);
+      const content2 = readFileSync(join(tmpDir, '.kimi', 'AGENTS.md'), 'utf-8');
+      expect(content2).toContain('# Session 2');
+      expect(content2).toContain('escaping');
+      expect(content2).not.toContain('# Session 1');
+    } finally {
+      cleanupTmpDir(tmpDir);
+    }
+  });
+
+  it('should create .kimi directory if missing before writing AGENTS.md', () => {
+    const tmpDir = join(tmpdir(), `kimi-adapter-test-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    process.chdir(tmpDir);
+    try {
+      // Do NOT create .kimi/ — it doesn't exist
+      const result = {
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: '# Previous Session\n\nSome context.',
+        },
+      };
+
+      // Should not throw
+      expect(() => kimiCliAdapter.formatOutput(result as any)).not.toThrow();
+
+      // File should exist
+      expect(existsSync(join(tmpDir, '.kimi', 'AGENTS.md'))).toBe(true);
+      const content = readFileSync(join(tmpDir, '.kimi', 'AGENTS.md'), 'utf-8');
+      expect(content).toContain('Some context');
+    } finally {
+      process.chdir(originalCwd);
+      if (existsSync(tmpDir)) {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+  });
 });

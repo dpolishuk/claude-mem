@@ -1,5 +1,5 @@
 import type { PlatformAdapter, NormalizedHookInput, HookResult } from '../types.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 
 /**
@@ -31,19 +31,22 @@ import path from 'path';
  * we write to .kimi/AGENTS.md instead.
  */
 
-const KIMI_AGENTS_MD_SENTINEL = 'KIMI_PLACEHOLDER_V1';
+const KIMI_AGENTS_MD_SENTINEL = 'CLAUDE_MEM_KIMI_CONTEXT';
 
 function writeKimiAgentsMdContext(additionalContext: string): void {
   if (!additionalContext || !additionalContext.trim()) return;
   const agentsMdPath = path.join(process.cwd(), '.kimi', 'AGENTS.md');
   if (existsSync(agentsMdPath)) {
     const content = readFileSync(agentsMdPath, 'utf-8');
-    if (!content.includes(KIMI_AGENTS_MD_SENTINEL)) {
+    // Recognize both the installer placeholder and previously written context
+    if (!content.includes(KIMI_AGENTS_MD_SENTINEL) && !content.includes('KIMI_PLACEHOLDER_V1')) {
       // User has edited the file — don't overwrite
       return;
     }
   }
-  writeFileSync(agentsMdPath, additionalContext.trim() + '\n');
+  mkdirSync(path.dirname(agentsMdPath), { recursive: true });
+  const body = additionalContext.trim() + '\n\n---\n*Context automatically updated by claude-mem*\n<!-- ' + KIMI_AGENTS_MD_SENTINEL + ' -->\n';
+  writeFileSync(agentsMdPath, body);
 }
 
 export const kimiCliAdapter: PlatformAdapter = {
