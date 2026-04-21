@@ -10,6 +10,7 @@ import { describe, it, expect } from 'bun:test';
 import { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { parseTomlHooks, rebuildToml } from '../src/services/integrations/KimiCliHooksInstaller.js';
 
 // ---------------------------------------------------------------------------
 // 1. TOML command escaping
@@ -261,44 +262,15 @@ describe('KimiCliHooksInstaller - CLI command handler', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. parseTomlHooks preserves trailing non-hook content
+// 7. parseTomlHooks preserves non-hook content
 // ---------------------------------------------------------------------------
 
-describe('KimiCliHooksInstaller - TOML trailing content preservation', () => {
-  it('should include trailing field in parseTomlHooks return type', async () => {
-    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
-    expect(src).toMatch(/parseTomlHooks.*trailing.*string/);
-  });
-
-  it('should pass trailing content to rebuildToml', async () => {
-    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
-    expect(src).toMatch(/rebuildToml\(.*trailing/);
-  });
-
+describe('KimiCliHooksInstaller - TOML segment preservation', () => {
   it('should preserve non-hook content after the last hook block', () => {
-    // Simulate the fixed parsing logic
-    const toml = `some_preamble = true\n\n[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker.cjs" hook kimi-cli context\ntimeout = 60\n\n[custom]\nkey = "value"\n`;
+    const toml = `some_preamble = true\n\n[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n\n[custom]\nkey = "value"\n`;
 
-    const hookMarker = '[[hooks]]';
-    const firstHookIdx = toml.indexOf(hookMarker);
-    const preamble = toml.slice(0, firstHookIdx);
-    let remaining = toml.slice(firstHookIdx);
-
-    // Find table header that is NOT [[hooks]]
-    const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
-    const trailingMatch = remaining.search(tableHeaderPattern);
-
-    let blockText: string;
-    let trailing = '';
-    if (trailingMatch !== -1) {
-      blockText = remaining.slice(0, trailingMatch);
-      trailing = remaining.slice(trailingMatch);
-    } else {
-      blockText = remaining;
-    }
-
-    const isOurs = blockText.includes('worker-service.cjs') || blockText.includes('kimi-cli');
-    const cleanedToml = preamble + (isOurs ? '' : blockText) + trailing;
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
 
     // The trailing [custom] table must survive removal of our hook block
     expect(cleanedToml).toContain('[custom]');
@@ -310,28 +282,39 @@ describe('KimiCliHooksInstaller - TOML trailing content preservation', () => {
   });
 
   it('should handle no trailing content correctly', () => {
-    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker.cjs" hook kimi-cli context\ntimeout = 60\n`;
+    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n`;
 
-    const hookMarker = '[[hooks]]';
-    const firstHookIdx = toml.indexOf(hookMarker);
-    const preamble = toml.slice(0, firstHookIdx);
-    const remaining = toml.slice(firstHookIdx);
-
-    const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
-    const trailingMatch = remaining.search(tableHeaderPattern);
-
-    let blockText: string;
-    let trailing = '';
-    if (trailingMatch !== -1) {
-      blockText = remaining.slice(0, trailingMatch);
-      trailing = remaining.slice(trailingMatch);
-    } else {
-      blockText = remaining;
-    }
-
-    const isOurs = blockText.includes('worker-service.cjs') || blockText.includes('kimi-cli');
-    const cleanedToml = preamble + (isOurs ? '' : blockText) + trailing;
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
 
     expect(cleanedToml.trim()).toBe('');
+  });
+
+  it('should preserve non-hook content between two hook blocks', () => {
+    const toml = `preamble\n\n[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n\n[custom]\nkey = "value"\n\n[[hooks]]\nevent = "UserPromptSubmit"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli session-init\ntimeout = 60\n`;
+
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
+
+    // Both blocks are ours in this test, so only preserved content should survive
+    expect(cleanedToml).toContain('[custom]');
+    expect(cleanedToml).toContain('key = "value"');
+    expect(cleanedToml).not.toContain('event = "SessionStart"');
+    expect(cleanedToml).not.toContain('event = "UserPromptSubmit"');
+    expect(cleanedToml).toContain('preamble');
+  });
+
+  it('should preserve user hooks while removing ours', () => {
+    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n\n[[hooks]]\nevent = "UserPromptSubmit"\ncommand = "echo hello"\ntimeout = 30\n`;
+
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
+
+    // Our hook removed
+    expect(cleanedToml).not.toContain('kimi-cli');
+    expect(cleanedToml).not.toContain('worker-service.cjs');
+    // User hook preserved
+    expect(cleanedToml).toContain('echo hello');
+    expect(cleanedToml).toContain('event = "UserPromptSubmit"');
   });
 });

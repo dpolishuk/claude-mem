@@ -125,10 +125,16 @@ describe('IDE dispatch regression fix', () => {
   });
 
   it('does not group copilot-cli with kimi-cli installer', () => {
-    // The copilot-cli case should reference MCP_IDE_INSTALLERS, not installKimiCliHooks
-    // We verify by checking that installKimiCliHooks appears ONLY in the kimi-cli case
+    // copilot-cli must stay on MCP map dispatch
+    const copilotCaseMatch = installSource.match(/case 'copilot-cli':[\s\S]*?break;/);
+    expect(copilotCaseMatch).toBeTruthy();
+    expect(copilotCaseMatch![0]).toContain('MCP_IDE_INSTALLERS[ideId]');
+    expect(copilotCaseMatch![0]).not.toContain('installKimiCliHooks');
+
+    // kimi-cli must stay on hooks installer path
     const kimiCliCaseMatch = installSource.match(/case 'kimi-cli':[\s\S]*?break;/);
     expect(kimiCliCaseMatch).toBeTruthy();
     expect(kimiCliCaseMatch![0]).toContain('installKimiCliHooks');
+    expect(kimiCliCaseMatch![0]).not.toContain('MCP_IDE_INSTALLERS[ideId]');
   });
 });

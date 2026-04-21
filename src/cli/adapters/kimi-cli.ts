@@ -75,16 +75,22 @@ export const kimiCliAdapter: PlatformAdapter = {
   },
 
   formatOutput(result) {
-    // Kimi CLI only respects blocking decisions from hook stdout.
-    // It does NOT support context injection via hook stdout (unlike Claude Code).
-    // Context is injected via .kimi/AGENTS.md instead.
+    // Kimi CLI respects blocking decisions and updatedInput from hook stdout.
+    // Context injection (additionalContext) is NOT supported via hook stdout;
+    // we use .kimi/AGENTS.md for that instead.
     const output: Record<string, unknown> = {};
+    const hso = result.hookSpecificOutput;
 
-    if (result.hookSpecificOutput?.permissionDecision === 'deny') {
+    if (hso?.permissionDecision) {
       output.hookSpecificOutput = {
-        permissionDecision: 'deny',
-        permissionDecisionReason: result.hookSpecificOutput.permissionDecisionReason ?? '',
+        permissionDecision: hso.permissionDecision,
       };
+      if (hso.permissionDecision === 'deny') {
+        output.hookSpecificOutput.permissionDecisionReason = hso.permissionDecisionReason ?? '';
+      }
+      if (hso.updatedInput) {
+        output.hookSpecificOutput.updatedInput = hso.updatedInput;
+      }
     }
 
     return output;

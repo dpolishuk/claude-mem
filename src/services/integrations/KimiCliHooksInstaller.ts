@@ -89,54 +89,84 @@ const KIMI_EVENT_TIMEOUTS: Record<string, number> = {
 // ============================================================================
 
 /**
- * Parse a TOML file into preamble (text before first [[hooks]]) and
- * an array of hook blocks with ownership flags.
+ * Parse a TOML file into preamble and segments.
+ *
+ * Each segment is either a hook block (with ownership flag) or preserved
+ * interstitial content (table headers, comments, etc.) that sits between
+ * hook blocks or after the last block. This prevents data loss when
+ * removing claude-mem hooks from a TOML file that contains user settings.
  */
-function parseTomlHooks(toml: string): { preamble: string; blocks: Array<{ text: string; isOurs: boolean }>; trailing: string } {
+export function parseTomlHooks(toml: string): {
+  preamble: string;
+  segments: Array<{ type: 'block' | 'preserved'; text: string; isOurs?: boolean }>;
+} {
   const hookMarker = '[[hooks]]';
   const firstHookIdx = toml.indexOf(hookMarker);
 
   if (firstHookIdx === -1) {
-    return { preamble: toml, blocks: [], trailing: '' };
+    return { preamble: toml, segments: [] };
   }
 
   const preamble = toml.slice(0, firstHookIdx);
   let remaining = toml.slice(firstHookIdx);
-  const blocks: Array<{ text: string; isOurs: boolean }> = [];
+  const segments: Array<{ type: 'block' | 'preserved'; text: string; isOurs?: boolean }> = [];
+  const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
 
   while (remaining.includes(hookMarker)) {
-    const nextIdx = remaining.indexOf(hookMarker, hookMarker.length);
+    const nextHookIdx = remaining.indexOf(hookMarker, hookMarker.length);
+    const tableHeaderMatch = remaining.search(tableHeaderPattern);
+
     let blockText: string;
-    let trailingInBlock = '';
 
-    if (nextIdx === -1) {
-      // Last block: check for trailing non-hook content (table headers, etc.)
-      const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
-      const trailingMatch = remaining.search(tableHeaderPattern);
-      if (trailingMatch !== -1) {
-        blockText = remaining.slice(0, trailingMatch);
-        trailingInBlock = remaining.slice(trailingMatch);
+    if (tableHeaderMatch !== -1 && (nextHookIdx === -1 || tableHeaderMatch < nextHookIdx)) {
+      // Table header appears before next hook (or in last block)
+      blockText = remaining.slice(0, tableHeaderMatch);
+
+      if (nextHookIdx !== -1) {
+        // Interstitial: table header to next hook
+        const interstitial = remaining.slice(tableHeaderMatch, nextHookIdx);
+        remaining = remaining.slice(nextHookIdx);
+        const isOurs =
+          blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
+        segments.push({ type: 'block', text: blockText, isOurs });
+        segments.push({ type: 'preserved', text: interstitial });
       } else {
-        blockText = remaining;
+        // Last block: trailing content
+        const trailing = remaining.slice(tableHeaderMatch);
+        remaining = '';
+        const isOurs =
+          blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
+        segments.push({ type: 'block', text: blockText, isOurs });
+        segments.push({ type: 'preserved', text: trailing });
       }
+    } else if (nextHookIdx !== -1) {
+      // Next hook before any table header
+      blockText = remaining.slice(0, nextHookIdx);
+      remaining = remaining.slice(nextHookIdx);
+      const isOurs =
+        blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
+      segments.push({ type: 'block', text: blockText, isOurs });
     } else {
-      blockText = remaining.slice(0, nextIdx);
+      // Last block, no table header
+      blockText = remaining;
+      remaining = '';
+      const isOurs =
+        blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
+      segments.push({ type: 'block', text: blockText, isOurs });
     }
-
-    const isOurs =
-      blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
-    blocks.push({ text: blockText, isOurs });
-
-    remaining = nextIdx === -1 ? trailingInBlock : remaining.slice(nextIdx);
   }
 
-  const trailing = remaining;
-  return { preamble, blocks, trailing };
+  return { preamble, segments };
 }
 
-function rebuildToml(preamble: string, blocks: Array<{ text: string; isOurs: boolean }>, trailing: string): string {
-  const kept = blocks.filter((b) => !b.isOurs).map((b) => b.text);
-  return (preamble + kept.join('') + trailing).trimEnd();
+export function rebuildToml(
+  preamble: string,
+  segments: Array<{ type: 'block' | 'preserved'; text: string; isOurs?: boolean }>,
+): string {
+  const kept = segments
+    .filter((s) => s.type === 'preserved' || (s.type === 'block' && !s.isOurs))
+    .map((s) => s.text);
+  return (preamble + kept.join('')).trimEnd();
 }
 
 function buildHookBlock(def: KimiHookDef): string {
@@ -316,8 +346,8 @@ export async function installKimiCliHooks(): Promise<number> {
 
     // Read existing TOML and merge
     const existingToml = readKimiConfig();
-    const { preamble, blocks, trailing } = parseTomlHooks(existingToml);
-    const cleanedToml = rebuildToml(preamble, blocks, trailing);
+    const { preamble, segments } = parseTomlHooks(existingToml);
+    const cleanedToml = rebuildToml(preamble, segments);
 
     const newBlocks = hookDefs.map(buildHookBlock).join('\n\n');
     const mergedToml = cleanedToml + '\n\n' + newBlocks + '\n';
@@ -387,9 +417,9 @@ export function uninstallKimiCliHooks(): number {
   if (existsSync(KIMI_CONFIG_PATH)) {
     try {
       const existingToml = readKimiConfig();
-      const { preamble, blocks, trailing } = parseTomlHooks(existingToml);
-      const hadOurs = blocks.some((b) => b.isOurs);
-      const cleanedToml = rebuildToml(preamble, blocks, trailing);
+      const { preamble, segments } = parseTomlHooks(existingToml);
+      const hadOurs = segments.some((s) => s.type === 'block' && s.isOurs);
+      const cleanedToml = rebuildToml(preamble, segments);
 
       if (hadOurs) {
         writeKimiConfig(cleanedToml);
@@ -439,8 +469,8 @@ export function checkKimiCliHooksStatus(): number {
   if (existsSync(KIMI_CONFIG_PATH)) {
     try {
       const toml = readKimiConfig();
-      const { blocks } = parseTomlHooks(toml);
-      const ourBlocks = blocks.filter((b) => b.isOurs);
+      const { segments } = parseTomlHooks(toml);
+      const ourBlocks = segments.filter((s) => s.type === 'block' && s.isOurs);
 
       if (ourBlocks.length > 0) {
         anyInstalled = true;
