@@ -317,4 +317,30 @@ describe('KimiCliHooksInstaller - TOML segment preservation', () => {
     expect(cleanedToml).toContain('echo hello');
     expect(cleanedToml).toContain('event = "UserPromptSubmit"');
   });
+
+  it('should preserve comments between hook blocks', () => {
+    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n\n# My custom note\n\n[[hooks]]\nevent = "UserPromptSubmit"\ncommand = "echo hello"\ntimeout = 30\n`;
+
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
+
+    // Our hook removed
+    expect(cleanedToml).not.toContain('kimi-cli');
+    // Comment preserved
+    expect(cleanedToml).toContain('# My custom note');
+    // User hook preserved
+    expect(cleanedToml).toContain('echo hello');
+  });
+
+  it('should preserve trailing comments after last hook block', () => {
+    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n\n# Trailing note\n`;
+
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
+
+    // Our hook removed
+    expect(cleanedToml).not.toContain('kimi-cli');
+    // Trailing comment preserved
+    expect(cleanedToml).toContain('# Trailing note');
+  });
 });

@@ -92,9 +92,13 @@ const KIMI_EVENT_TIMEOUTS: Record<string, number> = {
  * Parse a TOML file into preamble and segments.
  *
  * Each segment is either a hook block (with ownership flag) or preserved
- * interstitial content (table headers, comments, etc.) that sits between
- * hook blocks or after the last block. This prevents data loss when
- * removing claude-mem hooks from a TOML file that contains user settings.
+ * interstitial content (comments, table headers, blank lines, etc.) that
+ * sits between hook blocks or after the last block. This prevents data loss
+ * when removing claude-mem hooks from a TOML file that contains user settings.
+ *
+ * A block ends at the last hook property line (event/command/matcher/timeout).
+ * Everything after that line — comments, blank lines, table headers — is
+ * treated as preserved interstitial or trailing content.
  */
 export function parseTomlHooks(toml: string): {
   preamble: string;
@@ -110,53 +114,55 @@ export function parseTomlHooks(toml: string): {
   const preamble = toml.slice(0, firstHookIdx);
   let remaining = toml.slice(firstHookIdx);
   const segments: Array<{ type: 'block' | 'preserved'; text: string; isOurs?: boolean }> = [];
-  const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
 
   while (remaining.includes(hookMarker)) {
     const nextHookIdx = remaining.indexOf(hookMarker, hookMarker.length);
-    const tableHeaderMatch = remaining.search(tableHeaderPattern);
+    const rawChunk = nextHookIdx === -1 ? remaining : remaining.slice(0, nextHookIdx);
 
-    let blockText: string;
+    const { block, trailing } = splitHookBlock(rawChunk);
+    const isOurs =
+      block.includes(HOOK_COMMAND_SIGNATURE) && block.includes(KIMI_PLATFORM_SIGNATURE);
+    segments.push({ type: 'block', text: block, isOurs });
 
-    if (tableHeaderMatch !== -1 && (nextHookIdx === -1 || tableHeaderMatch < nextHookIdx)) {
-      // Table header appears before next hook (or in last block)
-      blockText = remaining.slice(0, tableHeaderMatch);
-
-      if (nextHookIdx !== -1) {
-        // Interstitial: table header to next hook
-        const interstitial = remaining.slice(tableHeaderMatch, nextHookIdx);
-        remaining = remaining.slice(nextHookIdx);
-        const isOurs =
-          blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
-        segments.push({ type: 'block', text: blockText, isOurs });
-        segments.push({ type: 'preserved', text: interstitial });
-      } else {
-        // Last block: trailing content
-        const trailing = remaining.slice(tableHeaderMatch);
-        remaining = '';
-        const isOurs =
-          blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
-        segments.push({ type: 'block', text: blockText, isOurs });
-        segments.push({ type: 'preserved', text: trailing });
-      }
-    } else if (nextHookIdx !== -1) {
-      // Next hook before any table header
-      blockText = remaining.slice(0, nextHookIdx);
-      remaining = remaining.slice(nextHookIdx);
-      const isOurs =
-        blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
-      segments.push({ type: 'block', text: blockText, isOurs });
-    } else {
-      // Last block, no table header
-      blockText = remaining;
-      remaining = '';
-      const isOurs =
-        blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
-      segments.push({ type: 'block', text: blockText, isOurs });
+    if (trailing) {
+      segments.push({ type: 'preserved', text: trailing });
     }
+
+    remaining = nextHookIdx === -1 ? '' : remaining.slice(nextHookIdx);
   }
 
   return { preamble, segments };
+}
+
+/**
+ * Split a raw chunk (from [[hooks]] to next [[hooks]] or EOF) into the
+ * actual hook block and any trailing/interstitial content.
+ *
+ * The block ends at the last line containing a hook property
+ * (event, command, matcher, timeout). Everything after that line is preserved.
+ */
+function splitHookBlock(chunk: string): { block: string; trailing: string } {
+  const hookPropertyPattern = /^\s*(event|command|matcher|timeout)\s*=/gm;
+  let lastMatchEnd = -1;
+  let match: RegExpExecArray | null;
+
+  while ((match = hookPropertyPattern.exec(chunk)) !== null) {
+    lastMatchEnd = match.index + match[0].length;
+  }
+
+  if (lastMatchEnd === -1) {
+    return { block: chunk, trailing: '' };
+  }
+
+  const lineEnd = chunk.indexOf('\n', lastMatchEnd);
+  if (lineEnd === -1) {
+    return { block: chunk, trailing: '' };
+  }
+
+  return {
+    block: chunk.slice(0, lineEnd + 1),
+    trailing: chunk.slice(lineEnd + 1),
+  };
 }
 
 export function rebuildToml(

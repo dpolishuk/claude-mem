@@ -57,7 +57,7 @@ describe('kimiCliAdapter - formatOutput', () => {
     expect(output).toEqual({});
   });
 
-  it('should return empty object for unknown permissionDecision', () => {
+  it('should pass through unknown permissionDecision values', () => {
     const result = {
       continue: true,
       hookSpecificOutput: {
