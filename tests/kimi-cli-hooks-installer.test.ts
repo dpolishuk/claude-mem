@@ -47,6 +47,22 @@ describe('KimiCliHooksInstaller - TOML escaping', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 1b. TOML matcher escaping
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - matcher escaping', () => {
+  it('should escape matcher values consistently with command', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+
+    // matcher must use JSON.stringify like command does
+    const matcherLine = src.match(/lines\.push\(`matcher = (.+?)`\)/);
+    expect(matcherLine).toBeTruthy();
+    expect(matcherLine![1]).toContain('JSON.stringify(def.matcher)');
+    expect(matcherLine![1]).not.toContain('"${def.matcher}"');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 2. PreToolUse timeout in seconds
 // ---------------------------------------------------------------------------
 
@@ -357,5 +373,21 @@ describe('KimiCliHooksInstaller - TOML segment preservation', () => {
     expect(cleanedToml).toContain('[server]');
     expect(cleanedToml).toContain('timeout = 999');
     expect(cleanedToml).toContain('command = "start"');
+  });
+
+  it('should handle inline comments on TOML table headers', () => {
+    // Valid TOML can have inline comments on table headers
+    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n\n[server] # keep this\ntimeout = 999\n\n[[other]] # array table\nkey = "val"\n`;
+
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
+
+    // Our hook removed
+    expect(cleanedToml).not.toContain('kimi-cli');
+    // User tables with inline comments preserved
+    expect(cleanedToml).toContain('[server] # keep this');
+    expect(cleanedToml).toContain('timeout = 999');
+    expect(cleanedToml).toContain('[[other]] # array table');
+    expect(cleanedToml).toContain('key = "val"');
   });
 });

@@ -150,8 +150,8 @@ function splitHookBlock(chunk: string): { block: string; trailing: string } {
   for (let i = 1; i < lines.length; i++) {
     const trimmed = lines[i].trim();
     if (trimmed.startsWith('#')) continue;
-    // Match [[array_of_tables]] or [standard_table]
-    if (/^\[\[.+\]\]$/.test(trimmed) || /^\[.+\]$/.test(trimmed)) {
+    // Match [[array_of_tables]] or [standard_table] (allow inline comments)
+    if (/^\[\[.+\]\]/.test(trimmed) || /^\[.+\]/.test(trimmed)) {
       boundaryLineIndex = i;
       break;
     }
@@ -196,7 +196,7 @@ export function rebuildToml(
 function buildHookBlock(def: KimiHookDef): string {
   const lines = ['[[hooks]]', `event = "${def.event}"`, `command = ${JSON.stringify(def.command)}`];
   if (def.matcher) {
-    lines.push(`matcher = "${def.matcher}"`);
+    lines.push(`matcher = ${JSON.stringify(def.matcher)}`);
   }
   lines.push(`timeout = ${def.timeout}`);
   return lines.join('\n');
