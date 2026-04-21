@@ -179,6 +179,10 @@ export async function runUninstallCommand(): Promise<void> {
       const { uninstallGeminiCliHooks } = await import('../../services/integrations/GeminiCliHooksInstaller.js');
       return uninstallGeminiCliHooks();
     }},
+    { label: 'Kimi CLI hooks', fn: async () => {
+      const { uninstallKimiCliHooks } = await import('../../services/integrations/KimiCliHooksInstaller.js');
+      return uninstallKimiCliHooks();
+    }},
     { label: 'Windsurf hooks', fn: async () => {
       const { uninstallWindsurfHooks } = await import('../../services/integrations/WindsurfHooksInstaller.js');
       return uninstallWindsurfHooks();

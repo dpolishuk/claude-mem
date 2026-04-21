@@ -167,6 +167,13 @@ export function detectInstalledIDEs(): IDEInfo[] {
       supported: true,
       hint: 'MCP-based integration',
     },
+    {
+      id: 'kimi-cli',
+      label: 'Kimi CLI',
+      detected: existsSync(join(home, '.kimi')) || isCommandInPath('kimi'),
+      supported: true,
+      hint: 'hooks + MCP integration',
+    },
   ];
 }
 
