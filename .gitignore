@@ -52,3 +52,8 @@ claude-opus-4-7+claude-mem.*.json
 logs/run_evaluation/
 .venv-swebench/
 .docker-blowout-data/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
