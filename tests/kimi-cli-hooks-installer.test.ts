@@ -233,7 +233,46 @@ Follow PEP 8.
 });
 
 // ---------------------------------------------------------------------------
-// 4. MCP command uses process.execPath (portability)
+// 4. MCP JSON corruption handling
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - MCP corruption resilience', () => {
+  it('should guard uninstallKimiMcp against corrupt mcp.json', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+
+    // uninstallKimiMcp must have try/catch around readKimiMcpConfig
+    const uninstallMatch = src.match(/function uninstallKimiMcp\(\)[\s\S]*?^\}/m);
+    expect(uninstallMatch).toBeTruthy();
+    const uninstallBody = uninstallMatch![0];
+    expect(uninstallBody).toContain('try');
+    expect(uninstallBody).toContain('catch');
+    expect(uninstallBody).toContain('readKimiMcpConfig');
+    // Must not re-throw; should warn and continue
+    expect(uninstallBody).not.toMatch(/catch[^{]*\{[\s\S]*?throw/m);
+  });
+
+  it('should guard checkKimiCliHooksStatus MCP section against corrupt mcp.json', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+
+    // checkKimiCliHooksStatus MCP section must have try/catch around readKimiMcpConfig
+    const statusMatch = src.match(/export function checkKimiCliHooksStatus\(\)[\s\S]*?^\}/m);
+    expect(statusMatch).toBeTruthy();
+    const statusBody = statusMatch![0];
+
+    // Find the MCP section within status
+    const mcpSectionMatch = statusBody.match(/Check MCP config[\s\S]*?^  \}/m);
+    expect(mcpSectionMatch).toBeTruthy();
+    const mcpSection = mcpSectionMatch![0];
+    expect(mcpSection).toContain('try');
+    expect(mcpSection).toContain('catch');
+    expect(mcpSection).toContain('readKimiMcpConfig');
+    // Must not re-throw; should warn and continue
+    expect(mcpSection).not.toMatch(/catch[^{]*\{[\s\S]*?throw/m);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. MCP command uses process.execPath (portability)
 // ---------------------------------------------------------------------------
 
 describe('KimiCliHooksInstaller - MCP config', () => {
@@ -245,7 +284,7 @@ describe('KimiCliHooksInstaller - MCP config', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. Uninstall AGENTS.md message is conditional
+// 6. Uninstall AGENTS.md message is conditional
 // ---------------------------------------------------------------------------
 
 describe('KimiCliHooksInstaller - uninstall messaging', () => {
@@ -263,7 +302,7 @@ describe('KimiCliHooksInstaller - uninstall messaging', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Unknown subcommand returns non-zero
+// 7. Unknown subcommand returns non-zero
 // ---------------------------------------------------------------------------
 
 describe('KimiCliHooksInstaller - CLI command handler', () => {
@@ -277,7 +316,7 @@ describe('KimiCliHooksInstaller - CLI command handler', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. parseTomlHooks preserves non-hook content
+// 8. parseTomlHooks preserves non-hook content
 // ---------------------------------------------------------------------------
 
 describe('KimiCliHooksInstaller - TOML segment preservation', () => {

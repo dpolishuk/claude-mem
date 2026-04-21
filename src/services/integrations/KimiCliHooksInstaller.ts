@@ -318,14 +318,19 @@ function installKimiMcp(): void {
 function uninstallKimiMcp(): void {
   if (!existsSync(KIMI_MCP_PATH)) return;
 
-  const config = readKimiMcpConfig();
-  if (config.mcpServers?.['claude-mem']) {
-    delete config.mcpServers['claude-mem'];
-    if (Object.keys(config.mcpServers).length === 0) {
-      delete config.mcpServers;
+  try {
+    const config = readKimiMcpConfig();
+    if (config.mcpServers?.['claude-mem']) {
+      delete config.mcpServers['claude-mem'];
+      if (Object.keys(config.mcpServers).length === 0) {
+        delete config.mcpServers;
+      }
+      writeKimiMcpConfig(config);
+      console.log(`  Removed claude-mem from ${KIMI_MCP_PATH}`);
     }
-    writeKimiMcpConfig(config);
-    console.log(`  Removed claude-mem from ${KIMI_MCP_PATH}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`  Warning: could not parse ${KIMI_MCP_PATH}: ${message}`);
   }
 }
 
@@ -513,13 +518,18 @@ export function checkKimiCliHooksStatus(): number {
 
   // Check MCP config
   if (existsSync(KIMI_MCP_PATH)) {
-    const config = readKimiMcpConfig();
-    if (config.mcpServers?.['claude-mem']) {
-      anyInstalled = true;
-      console.log(`MCP:    Installed`);
-      console.log(`  Config: ${KIMI_MCP_PATH}`);
-    } else {
-      console.log(`MCP:    Not installed`);
+    try {
+      const config = readKimiMcpConfig();
+      if (config.mcpServers?.['claude-mem']) {
+        anyInstalled = true;
+        console.log(`MCP:    Installed`);
+        console.log(`  Config: ${KIMI_MCP_PATH}`);
+      } else {
+        console.log(`MCP:    Not installed`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`MCP:    Unable to parse config (${message})`);
     }
   } else {
     console.log(`MCP:    Config file not found`);
