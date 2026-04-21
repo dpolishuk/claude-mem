@@ -218,7 +218,24 @@ async function setupIDEs(selectedIDEs: string[]): Promise<string[]> {
       case 'goose':
       case 'crush':
       case 'roo-code':
-      case 'warp':
+      case 'warp': {
+        const { MCP_IDE_INSTALLERS } = await import('../../services/integrations/McpIntegrations.js');
+        const mcpInstaller = MCP_IDE_INSTALLERS[ideId];
+        if (mcpInstaller) {
+          const mcpResult = await mcpInstaller();
+          const allIDEs = detectInstalledIDEs();
+          const ideInfo = allIDEs.find((i) => i.id === ideId);
+          const ideLabel = ideInfo?.label ?? ideId;
+          if (mcpResult === 0) {
+            log.success(`${ideLabel}: MCP integration installed.`);
+          } else {
+            log.error(`${ideLabel}: MCP integration failed.`);
+            failedIDEs.push(ideId);
+          }
+        }
+        break;
+      }
+
       case 'kimi-cli': {
         const { installKimiCliHooks } = await import('../../services/integrations/KimiCliHooksInstaller.js');
         const kimiResult = await installKimiCliHooks();

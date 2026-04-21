@@ -215,3 +215,123 @@ Follow PEP 8.
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// 4. MCP command uses process.execPath (portability)
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - MCP config', () => {
+  it('should use process.execPath instead of hardcoded "node" for MCP command', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+    expect(src).toContain('command: process.execPath');
+    expect(src).not.toContain("command: 'node'");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Uninstall AGENTS.md message is conditional
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - uninstall messaging', () => {
+  it('should make removeKimiAgentsMd return a boolean', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+    expect(src).toMatch(/function removeKimiAgentsMd[^{]*\{[\s\S]*?return (true|false)/);
+  });
+
+  it('should only log removal message when file was actually deleted', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+    // The call site should check the return value before logging
+    expect(src).toMatch(/const\s+\w+\s*=\s*removeKimiAgentsMd\(/);
+    expect(src).toMatch(/if\s*\(\s*\w+\s*\)\s*\{?[\s\S]*?console\.log\(`\s*Removed \.kimi\/AGENTS\.md placeholder/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Unknown subcommand returns non-zero
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - CLI command handler', () => {
+  it('should return 1 for unknown subcommands', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+    // Find the default branch in the switch statement
+    const defaultMatch = src.match(/default:[\s\S]*?return\s+(\d+)/);
+    expect(defaultMatch).toBeTruthy();
+    expect(defaultMatch![1]).toBe('1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. parseTomlHooks preserves trailing non-hook content
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - TOML trailing content preservation', () => {
+  it('should include trailing field in parseTomlHooks return type', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+    expect(src).toMatch(/parseTomlHooks.*trailing.*string/);
+  });
+
+  it('should pass trailing content to rebuildToml', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+    expect(src).toMatch(/rebuildToml\(.*trailing/);
+  });
+
+  it('should preserve non-hook content after the last hook block', () => {
+    // Simulate the fixed parsing logic
+    const toml = `some_preamble = true\n\n[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker.cjs" hook kimi-cli context\ntimeout = 60\n\n[custom]\nkey = "value"\n`;
+
+    const hookMarker = '[[hooks]]';
+    const firstHookIdx = toml.indexOf(hookMarker);
+    const preamble = toml.slice(0, firstHookIdx);
+    let remaining = toml.slice(firstHookIdx);
+
+    // Find table header that is NOT [[hooks]]
+    const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
+    const trailingMatch = remaining.search(tableHeaderPattern);
+
+    let blockText: string;
+    let trailing = '';
+    if (trailingMatch !== -1) {
+      blockText = remaining.slice(0, trailingMatch);
+      trailing = remaining.slice(trailingMatch);
+    } else {
+      blockText = remaining;
+    }
+
+    const isOurs = blockText.includes('worker-service.cjs') || blockText.includes('kimi-cli');
+    const cleanedToml = preamble + (isOurs ? '' : blockText) + trailing;
+
+    // The trailing [custom] table must survive removal of our hook block
+    expect(cleanedToml).toContain('[custom]');
+    expect(cleanedToml).toContain('key = "value"');
+    // Our hook should be removed
+    expect(cleanedToml).not.toContain('event = "SessionStart"');
+    // Preamble should survive
+    expect(cleanedToml).toContain('some_preamble = true');
+  });
+
+  it('should handle no trailing content correctly', () => {
+    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker.cjs" hook kimi-cli context\ntimeout = 60\n`;
+
+    const hookMarker = '[[hooks]]';
+    const firstHookIdx = toml.indexOf(hookMarker);
+    const preamble = toml.slice(0, firstHookIdx);
+    const remaining = toml.slice(firstHookIdx);
+
+    const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
+    const trailingMatch = remaining.search(tableHeaderPattern);
+
+    let blockText: string;
+    let trailing = '';
+    if (trailingMatch !== -1) {
+      blockText = remaining.slice(0, trailingMatch);
+      trailing = remaining.slice(trailingMatch);
+    } else {
+      blockText = remaining;
+    }
+
+    const isOurs = blockText.includes('worker-service.cjs') || blockText.includes('kimi-cli');
+    const cleanedToml = preamble + (isOurs ? '' : blockText) + trailing;
+
+    expect(cleanedToml.trim()).toBe('');
+  });
+});

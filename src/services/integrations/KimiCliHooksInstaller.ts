@@ -92,12 +92,12 @@ const KIMI_EVENT_TIMEOUTS: Record<string, number> = {
  * Parse a TOML file into preamble (text before first [[hooks]]) and
  * an array of hook blocks with ownership flags.
  */
-function parseTomlHooks(toml: string): { preamble: string; blocks: Array<{ text: string; isOurs: boolean }> } {
+function parseTomlHooks(toml: string): { preamble: string; blocks: Array<{ text: string; isOurs: boolean }>; trailing: string } {
   const hookMarker = '[[hooks]]';
   const firstHookIdx = toml.indexOf(hookMarker);
 
   if (firstHookIdx === -1) {
-    return { preamble: toml, blocks: [] };
+    return { preamble: toml, blocks: [], trailing: '' };
   }
 
   const preamble = toml.slice(0, firstHookIdx);
@@ -106,21 +106,37 @@ function parseTomlHooks(toml: string): { preamble: string; blocks: Array<{ text:
 
   while (remaining.includes(hookMarker)) {
     const nextIdx = remaining.indexOf(hookMarker, hookMarker.length);
-    const blockText = nextIdx === -1 ? remaining : remaining.slice(0, nextIdx);
+    let blockText: string;
+    let trailingInBlock = '';
+
+    if (nextIdx === -1) {
+      // Last block: check for trailing non-hook content (table headers, etc.)
+      const tableHeaderPattern = /\n(?=\[\[(?!hooks\]\])|\[(?!\[))/;
+      const trailingMatch = remaining.search(tableHeaderPattern);
+      if (trailingMatch !== -1) {
+        blockText = remaining.slice(0, trailingMatch);
+        trailingInBlock = remaining.slice(trailingMatch);
+      } else {
+        blockText = remaining;
+      }
+    } else {
+      blockText = remaining.slice(0, nextIdx);
+    }
 
     const isOurs =
       blockText.includes(HOOK_COMMAND_SIGNATURE) && blockText.includes(KIMI_PLATFORM_SIGNATURE);
     blocks.push({ text: blockText, isOurs });
 
-    remaining = nextIdx === -1 ? '' : remaining.slice(nextIdx);
+    remaining = nextIdx === -1 ? trailingInBlock : remaining.slice(nextIdx);
   }
 
-  return { preamble, blocks };
+  const trailing = remaining;
+  return { preamble, blocks, trailing };
 }
 
-function rebuildToml(preamble: string, blocks: Array<{ text: string; isOurs: boolean }>): string {
+function rebuildToml(preamble: string, blocks: Array<{ text: string; isOurs: boolean }>, trailing: string): string {
   const kept = blocks.filter((b) => !b.isOurs).map((b) => b.text);
-  return (preamble + kept.join('')).trimEnd();
+  return (preamble + kept.join('') + trailing).trimEnd();
 }
 
 function buildHookBlock(def: KimiHookDef): string {
@@ -202,9 +218,9 @@ function setupKimiAgentsMd(workspaceRoot: string): void {
   writeFileSync(agentsMdPath, AGENTS_MD_PLACEHOLDER);
 }
 
-function removeKimiAgentsMd(workspaceRoot: string): void {
+function removeKimiAgentsMd(workspaceRoot: string): boolean {
   const agentsMdPath = path.join(workspaceRoot, '.kimi', 'AGENTS.md');
-  if (!existsSync(agentsMdPath)) return;
+  if (!existsSync(agentsMdPath)) return false;
 
   const content = readFileSync(agentsMdPath, 'utf-8');
   const trimmedContent = content.trim();
@@ -215,7 +231,9 @@ function removeKimiAgentsMd(workspaceRoot: string): void {
   // we preserve it to avoid data loss.
   if (trimmedContent === trimmedPlaceholder) {
     unlinkSync(agentsMdPath);
+    return true;
   }
+  return false;
 }
 
 // ============================================================================
@@ -235,7 +253,7 @@ function installKimiMcp(): void {
   }
 
   config.mcpServers['claude-mem'] = {
-    command: 'node',
+    command: process.execPath,
     args: [mcpServerPath],
   };
 
@@ -298,8 +316,8 @@ export async function installKimiCliHooks(): Promise<number> {
 
     // Read existing TOML and merge
     const existingToml = readKimiConfig();
-    const { preamble, blocks } = parseTomlHooks(existingToml);
-    const cleanedToml = rebuildToml(preamble, blocks);
+    const { preamble, blocks, trailing } = parseTomlHooks(existingToml);
+    const cleanedToml = rebuildToml(preamble, blocks, trailing);
 
     const newBlocks = hookDefs.map(buildHookBlock).join('\n\n');
     const mergedToml = cleanedToml + '\n\n' + newBlocks + '\n';
@@ -369,9 +387,9 @@ export function uninstallKimiCliHooks(): number {
   if (existsSync(KIMI_CONFIG_PATH)) {
     try {
       const existingToml = readKimiConfig();
-      const { preamble, blocks } = parseTomlHooks(existingToml);
+      const { preamble, blocks, trailing } = parseTomlHooks(existingToml);
       const hadOurs = blocks.some((b) => b.isOurs);
-      const cleanedToml = rebuildToml(preamble, blocks);
+      const cleanedToml = rebuildToml(preamble, blocks, trailing);
 
       if (hadOurs) {
         writeKimiConfig(cleanedToml);
@@ -393,8 +411,10 @@ export function uninstallKimiCliHooks(): number {
 
   // Remove AGENTS.md
   const workspaceRoot = process.cwd();
-  removeKimiAgentsMd(workspaceRoot);
-  console.log(`  Removed .kimi/AGENTS.md placeholder`);
+  const removedAgents = removeKimiAgentsMd(workspaceRoot);
+  if (removedAgents) {
+    console.log(`  Removed .kimi/AGENTS.md placeholder`);
+  }
 
   console.log('\nUninstallation complete!\n');
   console.log('Restart Kimi CLI to apply changes.');
@@ -503,6 +523,6 @@ Examples:
 
 For more info: https://docs.claude-mem.ai/kimi-cli
       `);
-      return 0;
+      return 1;
   }
 }

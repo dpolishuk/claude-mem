@@ -110,3 +110,25 @@ describe('Install Non-TTY Support', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// PR Review Fix: IDE dispatch regression
+// ---------------------------------------------------------------------------
+
+describe('IDE dispatch regression fix', () => {
+  it('dispatches MCP IDEs via MCP_IDE_INSTALLERS map', () => {
+    expect(installSource).toContain('MCP_IDE_INSTALLERS[ideId]');
+  });
+
+  it('has kimi-cli in its own separate case block', () => {
+    expect(installSource).toContain("case 'kimi-cli':");
+  });
+
+  it('does not group copilot-cli with kimi-cli installer', () => {
+    // The copilot-cli case should reference MCP_IDE_INSTALLERS, not installKimiCliHooks
+    // We verify by checking that installKimiCliHooks appears ONLY in the kimi-cli case
+    const kimiCliCaseMatch = installSource.match(/case 'kimi-cli':[\s\S]*?break;/);
+    expect(kimiCliCaseMatch).toBeTruthy();
+    expect(kimiCliCaseMatch![0]).toContain('installKimiCliHooks');
+  });
+});
