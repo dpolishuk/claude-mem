@@ -80,6 +80,7 @@ describe('KimiCliHooksInstaller - timeout values', () => {
 
     // All timeouts should be <= 600 (kimi-cli max per HookDef pydantic model)
     const timeouts = [
+      { event: 'SessionStart', max: 600 },
       { event: 'UserPromptSubmit', max: 600 },
       { event: 'PreToolUse', max: 10 },
       { event: 'PostToolUse', max: 600 },

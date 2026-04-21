@@ -7,7 +7,7 @@
  * This routes through the hook-command.ts framework:
  *   readJsonFromStdin() → kimi-cli adapter → event handler → POST to worker
  *
- * Kimi CLI supports 13 lifecycle hooks; we register 6 that map to
+ * Kimi CLI supports 13 lifecycle hooks; we register 7 that map to
  * useful memory events. See src/cli/adapters/kimi-cli.ts for the adapter.
  *
  * Context injection is handled via .kimi/AGENTS.md (project-level),
@@ -53,14 +53,13 @@ const KIMI_PLATFORM_SIGNATURE = 'kimi-cli';
  * Mapping from Kimi CLI hook events to internal claude-mem event types.
  *
  * Events NOT mapped (not useful for memory):
- *   SessionStart              — generates context but Kimi CLI can't read
- *                               systemMessage from hook stdout, so it's wasteful
  *   SubagentStart, SubagentStop — subagent activity, too chatty
  *   PreCompact, PostCompact     — context compaction events
  *   Notification                — system notifications, rarely useful
  *   StopFailure                 — error state, not a memory event
  */
 const KIMI_EVENT_TO_INTERNAL_EVENT: Record<string, string> = {
+  'SessionStart': 'context',
   'UserPromptSubmit': 'session-init',
   'PreToolUse': 'file-context',
   'PostToolUse': 'observation',
@@ -76,6 +75,7 @@ const KIMI_EVENT_MATCHERS: Record<string, string> = {
 
 /** Timeouts per event type (seconds, matching Kimi CLI HookDef pydantic max 600) */
 const KIMI_EVENT_TIMEOUTS: Record<string, number> = {
+  'SessionStart': 60,
   'UserPromptSubmit': 60,
   'PreToolUse': 2,
   'PostToolUse': 120,

@@ -1,13 +1,16 @@
 import type { PlatformAdapter, NormalizedHookInput, HookResult } from '../types.js';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import path from 'path';
 
 /**
  * Kimi CLI Platform Adapter
  *
  * Normalizes Kimi CLI's hook JSON payload to NormalizedHookInput.
- * Kimi CLI supports 13 lifecycle hook events; we register 6 that map to
+ * Kimi CLI supports 13 lifecycle hook events; we register 7 that map to
  * useful memory events.
  *
  * Lifecycle:
+ *   SessionStart      → context      (write past-session context to .kimi/AGENTS.md)
  *   UserPromptSubmit  → session-init (initialize session, capture prompt)
  *   PreToolUse        → file-context (inject file observation history before Read)
  *   PostToolUse       → observation  (capture tool result)
@@ -16,8 +19,6 @@ import type { PlatformAdapter, NormalizedHookInput, HookResult } from '../types.
  *   SessionEnd        → session-complete (finalize session)
  *
  * Unmapped (not useful for memory):
- *   SessionStart              — generates context but Kimi CLI can't read
- *                               systemMessage from hook stdout, so it's wasteful
  *   SubagentStart, SubagentStop — subagent activity, too chatty
  *   PreCompact, PostCompact     — context compaction, not actionable
  *   Notification                — system notifications, rarely useful
@@ -27,8 +28,24 @@ import type { PlatformAdapter, NormalizedHookInput, HookResult } from '../types.
  *
  * Output format: Kimi CLI hooks only respect action="block"/"allow" and
  * reason for blocking. Context injection is NOT supported via hook stdout;
- * we use .kimi/AGENTS.md for that instead.
+ * we write to .kimi/AGENTS.md instead.
  */
+
+const KIMI_AGENTS_MD_SENTINEL = 'KIMI_PLACEHOLDER_V1';
+
+function writeKimiAgentsMdContext(additionalContext: string): void {
+  if (!additionalContext || !additionalContext.trim()) return;
+  const agentsMdPath = path.join(process.cwd(), '.kimi', 'AGENTS.md');
+  if (existsSync(agentsMdPath)) {
+    const content = readFileSync(agentsMdPath, 'utf-8');
+    if (!content.includes(KIMI_AGENTS_MD_SENTINEL)) {
+      // User has edited the file — don't overwrite
+      return;
+    }
+  }
+  writeFileSync(agentsMdPath, additionalContext.trim() + '\n');
+}
+
 export const kimiCliAdapter: PlatformAdapter = {
   normalizeInput(raw) {
     const r = (raw ?? {}) as any;
@@ -77,12 +94,17 @@ export const kimiCliAdapter: PlatformAdapter = {
   },
 
   formatOutput(result) {
-    // Kimi CLI respects blocking decisions and updatedInput from hook stdout.
-    // Context injection (additionalContext) is NOT supported via hook stdout;
-    // we use .kimi/AGENTS.md for that instead.
-    const output: Record<string, unknown> = {};
     const hso = result.hookSpecificOutput;
 
+    // Write past-session context to .kimi/AGENTS.md on SessionStart.
+    // Kimi CLI does not support hook stdout for context injection,
+    // so we use the project-level AGENTS.md file instead.
+    if (hso?.hookEventName === 'SessionStart' && hso?.additionalContext) {
+      writeKimiAgentsMdContext(hso.additionalContext);
+    }
+
+    // Kimi CLI respects blocking decisions and updatedInput from hook stdout.
+    const output: Record<string, unknown> = {};
     if (hso?.permissionDecision) {
       output.hookSpecificOutput = {
         permissionDecision: hso.permissionDecision,
