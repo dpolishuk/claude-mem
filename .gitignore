@@ -57,3 +57,7 @@ logs/run_evaluation/
 .dolt/
 *.db
 .beads-credential-key
+
+# User-local IDE configs
+.kimi/
+.serena/
