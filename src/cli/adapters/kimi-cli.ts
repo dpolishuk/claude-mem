@@ -4,11 +4,10 @@ import type { PlatformAdapter, NormalizedHookInput, HookResult } from '../types.
  * Kimi CLI Platform Adapter
  *
  * Normalizes Kimi CLI's hook JSON payload to NormalizedHookInput.
- * Kimi CLI supports 13 lifecycle hook events; we register 7 that map to
+ * Kimi CLI supports 13 lifecycle hook events; we register 6 that map to
  * useful memory events.
  *
  * Lifecycle:
- *   SessionStart      → context      (inject memory context)
  *   UserPromptSubmit  → session-init (initialize session, capture prompt)
  *   PreToolUse        → file-context (inject file observation history before Read)
  *   PostToolUse       → observation  (capture tool result)
@@ -17,6 +16,8 @@ import type { PlatformAdapter, NormalizedHookInput, HookResult } from '../types.
  *   SessionEnd        → session-complete (finalize session)
  *
  * Unmapped (not useful for memory):
+ *   SessionStart              — generates context but Kimi CLI can't read
+ *                               systemMessage from hook stdout, so it's wasteful
  *   SubagentStart, SubagentStop — subagent activity, too chatty
  *   PreCompact, PostCompact     — context compaction, not actionable
  *   Notification                — system notifications, rarely useful
@@ -70,6 +71,7 @@ export const kimiCliAdapter: PlatformAdapter = {
       toolName,
       toolInput,
       toolResponse,
+      transcriptPath: r.transcript_path,
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     };
   },

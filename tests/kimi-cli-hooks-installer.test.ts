@@ -64,7 +64,6 @@ describe('KimiCliHooksInstaller - timeout values', () => {
 
     // All timeouts should be <= 600 (kimi-cli max per HookDef pydantic model)
     const timeouts = [
-      { event: 'SessionStart', max: 600 },
       { event: 'UserPromptSubmit', max: 600 },
       { event: 'PreToolUse', max: 10 },
       { event: 'PostToolUse', max: 600 },
@@ -342,5 +341,21 @@ describe('KimiCliHooksInstaller - TOML segment preservation', () => {
     expect(cleanedToml).not.toContain('kimi-cli');
     // Trailing comment preserved
     expect(cleanedToml).toContain('# Trailing note');
+  });
+
+  it('should NOT absorb non-hook tables with hook-like keys', () => {
+    // A user table like [server] with timeout= or command= must survive
+    const toml = `[[hooks]]\nevent = "SessionStart"\ncommand = "/bin/bun" "/worker-service.cjs" hook kimi-cli context\ntimeout = 60\n\n[server]\ntimeout = 999\ncommand = "start"\n`;
+
+    const { preamble, segments } = parseTomlHooks(toml);
+    const cleanedToml = rebuildToml(preamble, segments);
+
+    // Our hook removed
+    expect(cleanedToml).not.toContain('kimi-cli');
+    expect(cleanedToml).not.toContain('event = "SessionStart"');
+    // User's [server] table preserved
+    expect(cleanedToml).toContain('[server]');
+    expect(cleanedToml).toContain('timeout = 999');
+    expect(cleanedToml).toContain('command = "start"');
   });
 });

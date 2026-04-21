@@ -1,6 +1,29 @@
 import { describe, it, expect } from 'bun:test';
 import { kimiCliAdapter } from '../src/cli/adapters/kimi-cli.js';
 
+describe('kimiCliAdapter - normalizeInput', () => {
+  it('should forward transcript_path when present', () => {
+    const input = {
+      hook_event_name: 'Stop',
+      session_id: 'sess-123',
+      cwd: '/tmp',
+      transcript_path: '/tmp/transcript.json',
+    };
+    const normalized = kimiCliAdapter.normalizeInput(input);
+    expect(normalized.transcriptPath).toBe('/tmp/transcript.json');
+  });
+
+  it('should omit transcript_path when absent', () => {
+    const input = {
+      hook_event_name: 'Stop',
+      session_id: 'sess-123',
+      cwd: '/tmp',
+    };
+    const normalized = kimiCliAdapter.normalizeInput(input);
+    expect(normalized.transcriptPath).toBeUndefined();
+  });
+});
+
 describe('kimiCliAdapter - formatOutput', () => {
   it('should forward deny decision with reason', () => {
     const result = {

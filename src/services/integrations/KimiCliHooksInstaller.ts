@@ -7,7 +7,7 @@
  * This routes through the hook-command.ts framework:
  *   readJsonFromStdin() → kimi-cli adapter → event handler → POST to worker
  *
- * Kimi CLI supports 13 lifecycle hooks; we register 7 that map to
+ * Kimi CLI supports 13 lifecycle hooks; we register 6 that map to
  * useful memory events. See src/cli/adapters/kimi-cli.ts for the adapter.
  *
  * Context injection is handled via .kimi/AGENTS.md (project-level),
@@ -53,13 +53,14 @@ const KIMI_PLATFORM_SIGNATURE = 'kimi-cli';
  * Mapping from Kimi CLI hook events to internal claude-mem event types.
  *
  * Events NOT mapped (not useful for memory):
+ *   SessionStart              — generates context but Kimi CLI can't read
+ *                               systemMessage from hook stdout, so it's wasteful
  *   SubagentStart, SubagentStop — subagent activity, too chatty
  *   PreCompact, PostCompact     — context compaction events
  *   Notification                — system notifications, rarely useful
  *   StopFailure                 — error state, not a memory event
  */
 const KIMI_EVENT_TO_INTERNAL_EVENT: Record<string, string> = {
-  'SessionStart': 'context',
   'UserPromptSubmit': 'session-init',
   'PreToolUse': 'file-context',
   'PostToolUse': 'observation',
@@ -75,7 +76,6 @@ const KIMI_EVENT_MATCHERS: Record<string, string> = {
 
 /** Timeouts per event type (seconds, matching Kimi CLI HookDef pydantic max 600) */
 const KIMI_EVENT_TIMEOUTS: Record<string, number> = {
-  'SessionStart': 60,
   'UserPromptSubmit': 60,
   'PreToolUse': 2,
   'PostToolUse': 120,
@@ -142,11 +142,29 @@ export function parseTomlHooks(toml: string): {
  * (event, command, matcher, timeout). Everything after that line is preserved.
  */
 function splitHookBlock(chunk: string): { block: string; trailing: string } {
+  // Find the first section boundary after the initial [[hooks]] line.
+  // This prevents matching hook-like keys (e.g. timeout=, command=) inside
+  // user tables (e.g. [server]) that appear after a hook block.
+  const lines = chunk.split('\n');
+  let boundaryLineIndex = -1;
+  for (let i = 1; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith('#')) continue;
+    // Match [[array_of_tables]] or [standard_table]
+    if (/^\[\[.+\]\]$/.test(trimmed) || /^\[.+\]$/.test(trimmed)) {
+      boundaryLineIndex = i;
+      break;
+    }
+  }
+
+  const searchChunk =
+    boundaryLineIndex === -1 ? chunk : lines.slice(0, boundaryLineIndex).join('\n');
+
   const hookPropertyPattern = /^\s*(event|command|matcher|timeout)\s*=/gm;
   let lastMatchEnd = -1;
   let match: RegExpExecArray | null;
 
-  while ((match = hookPropertyPattern.exec(chunk)) !== null) {
+  while ((match = hookPropertyPattern.exec(searchChunk)) !== null) {
     lastMatchEnd = match.index + match[0].length;
   }
 
