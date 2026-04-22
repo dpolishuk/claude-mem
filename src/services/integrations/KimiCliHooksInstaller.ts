@@ -280,10 +280,10 @@ function removeKimiAgentsMd(workspaceRoot: string): boolean {
   const trimmedContent = content.trim();
   const trimmedPlaceholder = AGENTS_MD_PLACEHOLDER.trim();
 
-  // Only remove if it's an exact placeholder match.
-  // If the user has edited the file in any way (even keeping the sentinel),
-  // we preserve it to avoid data loss.
-  if (trimmedContent === trimmedPlaceholder) {
+  // Remove if it's an exact placeholder match OR contains the persistent
+  // claude-mem context sentinel (written by SessionStart hook). User-edited
+  // files (no sentinel, not exact placeholder) are preserved.
+  if (trimmedContent === trimmedPlaceholder || content.includes('CLAUDE_MEM_KIMI_CONTEXT')) {
     unlinkSync(agentsMdPath);
     return true;
   }

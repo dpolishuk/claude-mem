@@ -231,6 +231,45 @@ Follow PEP 8.
       cleanupTmpDir();
     }
   });
+
+  it('should delete claude-mem-generated AGENTS.md with persistent sentinel', () => {
+    setupTmpDir();
+    try {
+      const agentsPath = join(tmpDir, '.kimi', 'AGENTS.md');
+
+      // Content written by SessionStart hook (has persistent sentinel)
+      const generatedContent = `# Previous Session\n\nWe discussed TOML parsing.\n\n---\n*Context automatically updated by claude-mem*\n<!-- CLAUDE_MEM_KIMI_CONTEXT -->\n`;
+      writeFileSync(agentsPath, generatedContent);
+
+      // Simulate the uninstaller logic (exact match OR persistent sentinel)
+      const content = readFileSync(agentsPath, 'utf-8');
+      const trimmedContent = content.trim();
+      const trimmedPlaceholder = `# Memory Context from Past Sessions\n\n*No context yet. Complete your first session and context will appear here.*\n\nUse claude-mem's MCP search tools for manual memory queries.\n<!-- KIMI_PLACEHOLDER_V1 -->`.trim();
+      const isOurs = trimmedContent === trimmedPlaceholder || content.includes('CLAUDE_MEM_KIMI_CONTEXT');
+
+      if (isOurs) {
+        rmSync(agentsPath);
+      }
+
+      expect(existsSync(agentsPath)).toBe(false);
+    } finally {
+      cleanupTmpDir();
+    }
+  });
+});
+
+describe('KimiCliHooksInstaller - AGENTS.md uninstall sentinel', () => {
+  it('should recognize CLAUDE_MEM_KIMI_CONTEXT sentinel in removeKimiAgentsMd', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+
+    // Find the removeKimiAgentsMd function
+    const funcMatch = src.match(/function removeKimiAgentsMd[\s\S]*?^\}/m);
+    expect(funcMatch).toBeTruthy();
+    const funcBody = funcMatch![0];
+
+    // Must check for the persistent sentinel (written by SessionStart hook)
+    expect(funcBody).toContain('CLAUDE_MEM_KIMI_CONTEXT');
+  });
 });
 
 // ---------------------------------------------------------------------------
