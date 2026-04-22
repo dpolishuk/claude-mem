@@ -42,9 +42,11 @@ interface KimiMcpConfig {
 // Constants
 // ============================================================================
 
-const KIMI_CONFIG_DIR = path.join(homedir(), '.kimi');
-const KIMI_CONFIG_PATH = path.join(KIMI_CONFIG_DIR, 'config.toml');
-const KIMI_MCP_PATH = path.join(KIMI_CONFIG_DIR, 'mcp.json');
+const KIMI_BASE_DIR = process.env.KIMI_SHARE_DIR
+  ? path.resolve(process.env.KIMI_SHARE_DIR)
+  : path.join(homedir(), '.kimi');
+const KIMI_CONFIG_PATH = path.join(KIMI_BASE_DIR, 'config.toml');
+const KIMI_MCP_PATH = path.join(KIMI_BASE_DIR, 'mcp.json');
 
 const HOOK_COMMAND_SIGNATURE = 'worker-service.cjs';
 const KIMI_PLATFORM_SIGNATURE = 'kimi-cli';

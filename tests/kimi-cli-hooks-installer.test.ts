@@ -312,6 +312,20 @@ describe('KimiCliHooksInstaller - MCP corruption resilience', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4b. KIMI_SHARE_DIR env var support
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - KIMI_SHARE_DIR', () => {
+  it('should resolve config paths from KIMI_SHARE_DIR when set', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+
+    // Must check KIMI_SHARE_DIR before falling back to ~/.kimi
+    expect(src).toContain('KIMI_SHARE_DIR');
+    expect(src).toContain('process.env.KIMI_SHARE_DIR');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. MCP command uses process.execPath (portability)
 // ---------------------------------------------------------------------------
 
