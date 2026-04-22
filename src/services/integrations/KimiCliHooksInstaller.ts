@@ -235,7 +235,7 @@ function readKimiConfig(): string {
 }
 
 function writeKimiConfig(content: string): void {
-  mkdirSync(KIMI_CONFIG_DIR, { recursive: true });
+  mkdirSync(KIMI_BASE_DIR, { recursive: true });
   writeFileSync(KIMI_CONFIG_PATH, content.trimEnd() + '\n');
 }
 
@@ -245,7 +245,7 @@ function readKimiMcpConfig(): KimiMcpConfig {
 }
 
 function writeKimiMcpConfig(config: KimiMcpConfig): void {
-  mkdirSync(KIMI_CONFIG_DIR, { recursive: true });
+  mkdirSync(KIMI_BASE_DIR, { recursive: true });
   writeFileSync(KIMI_MCP_PATH, JSON.stringify(config, null, 2) + '\n');
 }
 

@@ -326,6 +326,20 @@ describe('KimiCliHooksInstaller - KIMI_SHARE_DIR', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4c. No stale KIMI_CONFIG_DIR references after rename
+// ---------------------------------------------------------------------------
+
+describe('KimiCliHooksInstaller - config dir reference', () => {
+  it('should not reference KIMI_CONFIG_DIR after rename to KIMI_BASE_DIR', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+
+    // KIMI_CONFIG_DIR was renamed to KIMI_BASE_DIR; stale references crash at runtime
+    expect(src).not.toContain('KIMI_CONFIG_DIR');
+    expect(src).toContain('KIMI_BASE_DIR');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. MCP command uses process.execPath (portability)
 // ---------------------------------------------------------------------------
 
