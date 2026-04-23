@@ -68,8 +68,26 @@ export const kimiCliAdapter: PlatformAdapter = {
 
     // Tool fields — present in PreToolUse, PostToolUse, PostToolUseFailure
     const toolName: string | undefined = r.tool_name;
-    const toolInput: unknown = r.tool_input;
+    let toolInput: unknown = r.tool_input;
     let toolResponse: unknown = r.tool_output;
+
+    // Map Kimi ReadFile-style fields to internal schema expected by handlers.
+    // Kimi uses: path, line_offset, n_lines
+    // Internal uses: file_path, offset, limit
+    if (toolInput && typeof toolInput === 'object') {
+      const ti = toolInput as Record<string, unknown>;
+      const mapped: Record<string, unknown> = { ...ti };
+      if (ti.path !== undefined && ti.file_path === undefined) {
+        mapped.file_path = ti.path;
+      }
+      if (ti.line_offset !== undefined && ti.offset === undefined) {
+        mapped.offset = ti.line_offset;
+      }
+      if (ti.n_lines !== undefined && ti.limit === undefined) {
+        mapped.limit = ti.n_lines;
+      }
+      toolInput = mapped;
+    }
 
     if (hookEventName === 'PostToolUseFailure') {
       toolResponse = { error: r.error };
@@ -127,7 +145,21 @@ export const kimiCliAdapter: PlatformAdapter = {
         // additionalContext timeline, which Kimi CLI cannot receive via hook stdout.
         const hasDroppedContext = hso.additionalContext && hso.hookEventName !== 'SessionStart';
         if (!hasDroppedContext) {
-          output.hookSpecificOutput.updatedInput = hso.updatedInput;
+          // Map internal fields back to Kimi schema.
+          // Internal uses: file_path, offset, limit
+          // Kimi uses: path, line_offset, n_lines
+          const ui = hso.updatedInput as Record<string, unknown>;
+          const mapped: Record<string, unknown> = { ...ui };
+          if (ui.file_path !== undefined && ui.path === undefined) {
+            mapped.path = ui.file_path;
+          }
+          if (ui.offset !== undefined && ui.line_offset === undefined) {
+            mapped.line_offset = ui.offset;
+          }
+          if (ui.limit !== undefined && ui.n_lines === undefined) {
+            mapped.n_lines = ui.limit;
+          }
+          output.hookSpecificOutput.updatedInput = mapped;
         }
       }
     }

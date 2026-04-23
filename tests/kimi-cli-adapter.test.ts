@@ -25,6 +25,61 @@ describe('kimiCliAdapter - normalizeInput', () => {
     const normalized = kimiCliAdapter.normalizeInput(input);
     expect(normalized.transcriptPath).toBeUndefined();
   });
+
+  it('should map Kimi ReadFile path to internal file_path', () => {
+    const input = {
+      hook_event_name: 'PreToolUse',
+      session_id: 'sess-123',
+      cwd: '/tmp',
+      tool_name: 'ReadFile',
+      tool_input: { path: '/tmp/test.txt' },
+    };
+    const normalized = kimiCliAdapter.normalizeInput(input);
+    const toolInput = normalized.toolInput as Record<string, unknown>;
+    expect(toolInput.file_path).toBe('/tmp/test.txt');
+    expect(toolInput.path).toBe('/tmp/test.txt');
+  });
+
+  it('should map Kimi ReadFile line_offset to internal offset', () => {
+    const input = {
+      hook_event_name: 'PreToolUse',
+      session_id: 'sess-123',
+      cwd: '/tmp',
+      tool_name: 'ReadFile',
+      tool_input: { path: '/tmp/test.txt', line_offset: 10 },
+    };
+    const normalized = kimiCliAdapter.normalizeInput(input);
+    const toolInput = normalized.toolInput as Record<string, unknown>;
+    expect(toolInput.offset).toBe(10);
+    expect(toolInput.line_offset).toBe(10);
+  });
+
+  it('should map Kimi ReadFile n_lines to internal limit', () => {
+    const input = {
+      hook_event_name: 'PreToolUse',
+      session_id: 'sess-123',
+      cwd: '/tmp',
+      tool_name: 'ReadFile',
+      tool_input: { path: '/tmp/test.txt', n_lines: 50 },
+    };
+    const normalized = kimiCliAdapter.normalizeInput(input);
+    const toolInput = normalized.toolInput as Record<string, unknown>;
+    expect(toolInput.limit).toBe(50);
+    expect(toolInput.n_lines).toBe(50);
+  });
+
+  it('should NOT overwrite existing file_path when mapping path', () => {
+    const input = {
+      hook_event_name: 'PreToolUse',
+      session_id: 'sess-123',
+      cwd: '/tmp',
+      tool_name: 'ReadFile',
+      tool_input: { path: '/kimi/path.txt', file_path: '/internal/path.txt' },
+    };
+    const normalized = kimiCliAdapter.normalizeInput(input);
+    const toolInput = normalized.toolInput as Record<string, unknown>;
+    expect(toolInput.file_path).toBe('/internal/path.txt');
+  });
 });
 
 describe('kimiCliAdapter - formatOutput', () => {
@@ -57,7 +112,7 @@ describe('kimiCliAdapter - formatOutput', () => {
     expect(output).toEqual({
       hookSpecificOutput: {
         permissionDecision: 'allow',
-        updatedInput: { file_path: '/tmp/test.txt', limit: 1 },
+        updatedInput: { file_path: '/tmp/test.txt', limit: 1, path: '/tmp/test.txt', n_lines: 1 },
       },
     });
   });
@@ -96,6 +151,61 @@ describe('kimiCliAdapter - formatOutput', () => {
         permissionDecision: 'maybe',
       },
     });
+  });
+
+  it('should map updatedInput file_path back to Kimi path', () => {
+    const result = {
+      continue: true,
+      hookSpecificOutput: {
+        permissionDecision: 'allow',
+        updatedInput: { file_path: '/tmp/test.txt' },
+      },
+    };
+    const output = kimiCliAdapter.formatOutput(result as any);
+    const ui = output.hookSpecificOutput.updatedInput as Record<string, unknown>;
+    expect(ui.path).toBe('/tmp/test.txt');
+    expect(ui.file_path).toBe('/tmp/test.txt');
+  });
+
+  it('should map updatedInput offset back to Kimi line_offset', () => {
+    const result = {
+      continue: true,
+      hookSpecificOutput: {
+        permissionDecision: 'allow',
+        updatedInput: { file_path: '/tmp/test.txt', offset: 10 },
+      },
+    };
+    const output = kimiCliAdapter.formatOutput(result as any);
+    const ui = output.hookSpecificOutput.updatedInput as Record<string, unknown>;
+    expect(ui.line_offset).toBe(10);
+    expect(ui.offset).toBe(10);
+  });
+
+  it('should map updatedInput limit back to Kimi n_lines', () => {
+    const result = {
+      continue: true,
+      hookSpecificOutput: {
+        permissionDecision: 'allow',
+        updatedInput: { file_path: '/tmp/test.txt', limit: 1 },
+      },
+    };
+    const output = kimiCliAdapter.formatOutput(result as any);
+    const ui = output.hookSpecificOutput.updatedInput as Record<string, unknown>;
+    expect(ui.n_lines).toBe(1);
+    expect(ui.limit).toBe(1);
+  });
+
+  it('should NOT overwrite existing path when mapping updatedInput', () => {
+    const result = {
+      continue: true,
+      hookSpecificOutput: {
+        permissionDecision: 'allow',
+        updatedInput: { file_path: '/internal/path.txt', path: '/kimi/path.txt' },
+      },
+    };
+    const output = kimiCliAdapter.formatOutput(result as any);
+    const ui = output.hookSpecificOutput.updatedInput as Record<string, unknown>;
+    expect(ui.path).toBe('/kimi/path.txt');
   });
 });
 
@@ -240,7 +350,7 @@ describe('kimiCliAdapter - AGENTS.md context sync', () => {
     expect(output).toEqual({
       hookSpecificOutput: {
         permissionDecision: 'allow',
-        updatedInput: { file_path: '/tmp/test.txt', limit: 1 },
+        updatedInput: { file_path: '/tmp/test.txt', limit: 1, path: '/tmp/test.txt', n_lines: 1 },
       },
     });
   });
