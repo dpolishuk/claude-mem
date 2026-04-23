@@ -303,7 +303,15 @@ function installKimiMcp(): void {
     return;
   }
 
-  const config = readKimiMcpConfig();
+  let config: KimiMcpConfig;
+  try {
+    config = readKimiMcpConfig();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`  Warning: Corrupt MCP config detected, starting fresh: ${message}`);
+    config = {};
+  }
+
   if (!config.mcpServers) {
     config.mcpServers = {};
   }

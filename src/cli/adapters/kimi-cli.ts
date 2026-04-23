@@ -1,6 +1,7 @@
 import type { PlatformAdapter, NormalizedHookInput, HookResult } from '../types.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
+import { logger } from '../../utils/logger.js';
 
 /**
  * Kimi CLI Platform Adapter
@@ -35,18 +36,23 @@ const KIMI_AGENTS_MD_SENTINEL = 'CLAUDE_MEM_KIMI_CONTEXT';
 
 function writeKimiAgentsMdContext(additionalContext: string): void {
   if (!additionalContext || !additionalContext.trim()) return;
-  const agentsMdPath = path.join(process.cwd(), '.kimi', 'AGENTS.md');
-  if (existsSync(agentsMdPath)) {
-    const content = readFileSync(agentsMdPath, 'utf-8');
-    // Recognize both the installer placeholder and previously written context
-    if (!content.includes(KIMI_AGENTS_MD_SENTINEL) && !content.includes('KIMI_PLACEHOLDER_V1')) {
-      // User has edited the file — don't overwrite
-      return;
+  try {
+    const agentsMdPath = path.join(process.cwd(), '.kimi', 'AGENTS.md');
+    if (existsSync(agentsMdPath)) {
+      const content = readFileSync(agentsMdPath, 'utf-8');
+      // Recognize both the installer placeholder and previously written context
+      if (!content.includes(KIMI_AGENTS_MD_SENTINEL) && !content.includes('KIMI_PLACEHOLDER_V1')) {
+        // User has edited the file — don't overwrite
+        return;
+      }
     }
+    mkdirSync(path.dirname(agentsMdPath), { recursive: true });
+    const body = additionalContext.trim() + '\n\n---\n*Context automatically updated by claude-mem*\n<!-- ' + KIMI_AGENTS_MD_SENTINEL + ' -->\n';
+    writeFileSync(agentsMdPath, body);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('KIMI_ADAPTER', `Could not write Kimi AGENTS.md context: ${message}`);
   }
-  mkdirSync(path.dirname(agentsMdPath), { recursive: true });
-  const body = additionalContext.trim() + '\n\n---\n*Context automatically updated by claude-mem*\n<!-- ' + KIMI_AGENTS_MD_SENTINEL + ' -->\n';
-  writeFileSync(agentsMdPath, body);
 }
 
 export const kimiCliAdapter: PlatformAdapter = {

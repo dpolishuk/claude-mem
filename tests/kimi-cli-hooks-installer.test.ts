@@ -309,6 +309,20 @@ describe('KimiCliHooksInstaller - MCP corruption resilience', () => {
     // Must not re-throw; should warn and continue
     expect(mcpSection).not.toMatch(/catch[^{]*\{[\s\S]*?throw/m);
   });
+
+  it('should guard installKimiMcp against corrupt mcp.json', async () => {
+    const src = readFileSync('src/services/integrations/KimiCliHooksInstaller.ts', 'utf-8');
+
+    // installKimiMcp must have try/catch around readKimiMcpConfig
+    const installMatch = src.match(/function installKimiMcp\(\)[\s\S]*?^\}/m);
+    expect(installMatch).toBeTruthy();
+    const installBody = installMatch![0];
+    expect(installBody).toContain('try');
+    expect(installBody).toContain('catch');
+    expect(installBody).toContain('readKimiMcpConfig');
+    // Must not re-throw; should warn and continue with fresh config
+    expect(installBody).not.toMatch(/catch[^{]*\{[\s\S]*?throw/m);
+  });
 });
 
 // ---------------------------------------------------------------------------

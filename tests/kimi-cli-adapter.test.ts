@@ -309,4 +309,57 @@ describe('kimiCliAdapter - AGENTS.md context sync', () => {
       }
     }
   });
+
+  it('should not throw when .kimi exists as a file instead of directory', () => {
+    const tmpDir = join(tmpdir(), `kimi-adapter-test-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    // Create .kimi as a REGULAR FILE (not directory)
+    writeFileSync(join(tmpDir, '.kimi'), 'I am a file');
+    process.chdir(tmpDir);
+    try {
+      const result = {
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: '# Previous Session\n\nSome context.',
+        },
+      };
+
+      // Should NOT throw — must swallow filesystem error gracefully
+      const output = kimiCliAdapter.formatOutput(result as any);
+      expect(output).toEqual({});
+    } finally {
+      process.chdir(originalCwd);
+      if (existsSync(tmpDir)) {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('should return valid output even when AGENTS.md write fails', () => {
+    const tmpDir = join(tmpdir(), `kimi-adapter-test-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    process.chdir(tmpDir);
+    try {
+      // Create a read-only parent directory scenario by making .kimi a file
+      writeFileSync(join(tmpDir, '.kimi'), 'block');
+
+      const result = {
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: '# Previous Session\n\nSome context.',
+        },
+      };
+
+      // Must return empty object (no permissionDecision), not throw
+      const output = kimiCliAdapter.formatOutput(result as any);
+      expect(output).toEqual({});
+    } finally {
+      process.chdir(originalCwd);
+      if (existsSync(tmpDir)) {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+  });
 });
