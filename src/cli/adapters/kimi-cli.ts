@@ -116,7 +116,13 @@ export const kimiCliAdapter: PlatformAdapter = {
         output.hookSpecificOutput.permissionDecisionReason = hso.permissionDecisionReason ?? '';
       }
       if (hso.updatedInput) {
-        output.hookSpecificOutput.updatedInput = hso.updatedInput;
+        // Don't forward updatedInput when additionalContext is present on non-SessionStart,
+        // because the updatedInput (e.g. limit=1) was designed to be paired with
+        // additionalContext timeline, which Kimi CLI cannot receive via hook stdout.
+        const hasDroppedContext = hso.additionalContext && hso.hookEventName !== 'SessionStart';
+        if (!hasDroppedContext) {
+          output.hookSpecificOutput.updatedInput = hso.updatedInput;
+        }
       }
     }
 

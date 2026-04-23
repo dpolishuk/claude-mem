@@ -206,6 +206,45 @@ describe('kimiCliAdapter - AGENTS.md context sync', () => {
     }
   });
 
+  it('should NOT forward updatedInput when additionalContext is present on non-SessionStart', () => {
+    // PreToolUse fileContextHandler returns updatedInput.limit=1 paired with
+    // additionalContext timeline. On Kimi, additionalContext is dropped,
+    // so updatedInput must also be dropped to avoid harmful truncation.
+    const result = {
+      continue: true,
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        additionalContext: '# Timeline\n\nPrior observations.',
+        updatedInput: { file_path: '/tmp/test.txt', limit: 1 },
+      },
+    };
+    const output = kimiCliAdapter.formatOutput(result as any);
+    expect(output).toEqual({
+      hookSpecificOutput: {
+        permissionDecision: 'allow',
+      },
+    });
+  });
+
+  it('should forward updatedInput when additionalContext is absent', () => {
+    const result = {
+      continue: true,
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        updatedInput: { file_path: '/tmp/test.txt', limit: 1 },
+      },
+    };
+    const output = kimiCliAdapter.formatOutput(result as any);
+    expect(output).toEqual({
+      hookSpecificOutput: {
+        permissionDecision: 'allow',
+        updatedInput: { file_path: '/tmp/test.txt', limit: 1 },
+      },
+    });
+  });
+
   it('should refresh AGENTS.md on subsequent SessionStart calls', () => {
     const tmpDir = setupTmpDir();
     try {
