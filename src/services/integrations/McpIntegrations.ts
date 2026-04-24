@@ -12,6 +12,7 @@
  *   - Crush
  *   - Roo Code
  *   - Warp
+ *   - Kimi CLI (hooks + MCP)
  *
  * All IDEs point to the same MCP server: plugin/scripts/mcp-server.cjs
  */

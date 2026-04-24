@@ -236,6 +236,18 @@ async function setupIDEs(selectedIDEs: string[]): Promise<string[]> {
         break;
       }
 
+      case 'kimi-cli': {
+        const { installKimiCliHooks } = await import('../../services/integrations/KimiCliHooksInstaller.js');
+        const kimiResult = await installKimiCliHooks();
+        if (kimiResult === 0) {
+          log.success('Kimi CLI: hooks + MCP installed.');
+        } else {
+          log.error('Kimi CLI: hook installation failed.');
+          failedIDEs.push(ideId);
+        }
+        break;
+      }
+
       default: {
         const allIDEs = detectInstalledIDEs();
         const ide = allIDEs.find((i) => i.id === ideId);

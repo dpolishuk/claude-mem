@@ -5,6 +5,7 @@
 export * from './types.js';
 export * from './CursorHooksInstaller.js';
 export * from './GeminiCliHooksInstaller.js';
+export * from './KimiCliHooksInstaller.js';
 export * from './OpenCodeInstaller.js';
 export * from './WindsurfHooksInstaller.js';
 export * from './OpenClawInstaller.js';
